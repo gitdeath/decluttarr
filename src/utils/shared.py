@@ -1,6 +1,7 @@
 # Shared Functions
 import logging, verboselogs
-
+import asyncio
+import requests
 logger = verboselogs.VerboseLogger(__name__)
 from src.utils.rest import rest_get, rest_delete, rest_post
 from src.utils.nest_functions import add_keys_nested_dict, nested_get
@@ -22,7 +23,7 @@ async def get_arr_records(BASE_URL, API_KEY, params={}, end_point=""):
     return records["records"]
 
 
-async def get_queue(BASE_URL, API_KEY, params={}):
+async def get_queue(BASE_URL, API_KEY, settingsDict, params={}):
     # Refreshes and retrieves the current queue
     await rest_post(
         url=BASE_URL + "/command",
@@ -31,6 +32,7 @@ async def get_queue(BASE_URL, API_KEY, params={}):
     )
     queue = await get_arr_records(BASE_URL, API_KEY, params=params, end_point="queue")
     queue = filterOutDelayedQueueItems(queue)
+    queue = filterOutIgnoredDownloadClients(queue, settingsDict)
     return queue
 
 
@@ -56,6 +58,28 @@ def filterOutDelayedQueueItems(queue):
                 )
         else:
             filtered_queue.append(queue_item)
+    return filtered_queue
+
+
+def filterOutIgnoredDownloadClients(queue, settingsDict):
+    """
+    Filters out queue items whose download client is listed in IGNORED_DOWNLOAD_CLIENTS.
+    """
+    if queue is None:
+        return queue
+    filtered_queue = []
+
+    for queue_item in queue:
+        download_client = queue_item.get("downloadClient", "Unknown client")
+        if download_client in settingsDict["IGNORED_DOWNLOAD_CLIENTS"]:
+            logger.debug(
+                ">>> Queue item ignored due to ignored download client: %s (Download Client: %s)",
+                queue_item["title"],
+                download_client,
+            )
+        else:
+            filtered_queue.append(queue_item)
+
     return filtered_queue
 
 
@@ -154,7 +178,7 @@ async def execute_checks(
             )
         # Exit Logs
         if settingsDict["LOG_LEVEL"] == "DEBUG":
-            queue = await get_queue(BASE_URL, API_KEY)
+            queue = await get_queue(BASE_URL, API_KEY, settingsDict)
             logger.debug(
                 "execute_checks/queue OUT (failType: %s): %s",
                 failType,
@@ -314,14 +338,12 @@ def errorDetails(NAME, error):
     exc_type, exc_obj, exc_tb = sys.exc_info()
     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
     logger.warning(
-        ">>> Queue cleaning failed on %s. (File: %s / Line: %s / Error Message: %s / Error Type: %s)",
+        ">>> Queue cleaning failed on %s. (File: %s / Line: %s / %s)",
         NAME,
         fname,
         exc_tb.tb_lineno,
-        error,
-        exc_type,
+        traceback.format_exc(),
     )
-    logger.debug(traceback.format_exc())
     return
 
 
@@ -353,6 +375,11 @@ def formattedQueueInfo(queue):
     except Exception as error:
         errorDetails("formattedQueueInfo", error)
         logger.debug("formattedQueueInfo/queue for debug: %s", str(queue))
+        if isinstance(error, KeyError):
+            logger.debug(
+                "formattedQueueInfo/queue_item with error for debug: %s", queue_item
+            )
+
         return "error"
 
 
@@ -372,3 +399,18 @@ async def qBitOffline(settingsDict, failType, NAME):
             )
             return True
     return False
+
+async def qBitRefreshCookie(settingsDict):
+    try: 
+        response = await asyncio.get_event_loop().run_in_executor(None, lambda: requests.post(settingsDict['QBITTORRENT_URL']+'/auth/login', data={'username': settingsDict['QBITTORRENT_USERNAME'], 'password': settingsDict['QBITTORRENT_PASSWORD']}, headers={'content-type': 'application/x-www-form-urlencoded'}, verify=settingsDict['SSL_VERIFICATION']))
+        if response.text == 'Fails.':
+            raise ConnectionError('Login failed.')
+        response.raise_for_status()
+        settingsDict['QBIT_COOKIE'] = {'SID': response.cookies['SID']} 
+        logger.debug('qBit cookie refreshed!')
+    except Exception as error:
+        logger.error('!! %s Error: !!', 'qBittorrent')
+        logger.error('> %s', error)
+        logger.error('> Details:')
+        logger.error(response.text)
+        settingsDict['QBIT_COOKIE'] = {}
