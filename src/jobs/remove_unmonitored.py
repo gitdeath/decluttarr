@@ -36,6 +36,7 @@ async def remove_unmonitored(
         # Find items affected
         monitoredDownloadIDs = []
         for queueItem in queue:
+            logger.debug("Checking queue item: %s", queueItem)  # Log the entire queue item
             if arr_type == "SONARR":
                 isMonitored = (
                     await rest_get(
