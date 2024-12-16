@@ -40,6 +40,7 @@ async def remove_slow(
         affectedItems = []
         alreadyCheckedDownloadIDs = []
         for queueItem in queue:
+            logger.debug("Checking queue item: %s", queueItem)  # Log the entire queue item
             if (
                 "downloadId" in queueItem
                 and "size" in queueItem
