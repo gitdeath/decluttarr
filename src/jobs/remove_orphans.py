@@ -43,6 +43,7 @@ async def remove_orphans(
         affectedItems = []
         # 2. compare all queue items against the known ones, and those that are not found are the "unknown" or "orphan" ones
         for queueItem in full_queue:
+            logger.debug("Checking queue item: %s", queueItem)  # Log the entire queue item
             if queueItem["id"] not in queueIDs:
                 affectedItems.append(queueItem)
 
