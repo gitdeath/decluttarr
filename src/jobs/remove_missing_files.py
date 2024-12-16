@@ -37,6 +37,7 @@ async def remove_missing_files(
         # Find items affected
         affectedItems = []
         for queueItem in queue:
+            logger.debug("Checking queue item: %s", queueItem)  # Log the entire queue item
             if "status" in queueItem:
                 # case to check for failed torrents
                 if (
