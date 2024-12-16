@@ -37,6 +37,7 @@ async def remove_stalled(
         # Find items affected
         affectedItems = []
         for queueItem in queue:
+            logger.debug("Checking queue item: %s", queueItem)  # Log the entire queue item
             if "errorMessage" in queueItem and "status" in queueItem:
                 if (
                     queueItem["status"] == "warning"
