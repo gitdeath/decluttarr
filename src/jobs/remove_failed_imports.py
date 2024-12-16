@@ -31,6 +31,7 @@ async def remove_failed_imports(
         if not patterns:  # If patterns is empty or not present
             patterns = None
         for queueItem in queue:
+            logger.debug("Checking queue item: %s", queueItem)  # Log the entire queue item
             if (
                 "status" in queueItem
                 and "trackedDownloadStatus" in queueItem
